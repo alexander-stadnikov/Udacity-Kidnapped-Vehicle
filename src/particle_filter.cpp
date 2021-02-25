@@ -15,13 +15,15 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <stdexcept>
+#include <cmath>
 
 #include "helper_functions.h"
 
 namespace {
 bool is_zero(double val)
 {
-  return fabs(val) < 1.0e-6;
+  return std::isless(val, 1.0e-06);
 }
 }
 
@@ -82,16 +84,24 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
 }
 
 void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, 
-                                     std::vector<LandmarkObs>& observations) {
-  /**
-   * TODO: Find the predicted measurement that is closest to each 
-   *   observed measurement and assign the observed measurement to this 
-   *   particular landmark.
-   * NOTE: this method will NOT be called by the grading code. But you will 
-   *   probably find it useful to implement this method and use it as a helper 
-   *   during the updateWeights phase.
-   */
-
+                                     std::vector<LandmarkObs>& observations)
+{
+  const auto not_found = -1;
+  for (auto& o : observations) {
+    auto min_dist = std::numeric_limits<double>::max();
+    o.id = not_found;
+    for (const auto& p : predicted) {
+      const auto d = dist(p.x, p.y, o.x, o.y);      
+      if (std::islessequal(d, min_dist)) {
+        min_dist = d;
+        o.id = p.id;
+      }
+    }
+    
+    if (o.id == not_found) {
+      throw std::logic_error("Landmark not found");
+    }
+  }
 }
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], 
