@@ -1,8 +1,5 @@
-/**
- * particle_filter.cpp
- */
-
 #include "particle_filter.h"
+#include "helper_functions.h"
 
 #include <math.h>
 #include <algorithm>
@@ -15,12 +12,10 @@
 #include <stdexcept>
 #include <cmath>
 
-#include "helper_functions.h"
-
 namespace
 {
-  std::vector<LandmarkObs> observations_for_particle(const Particle &p,
-                                                     const std::vector<LandmarkObs> &obs)
+  std::vector<LandmarkObs> observationsForParticle(const Particle &p,
+                                                   const std::vector<LandmarkObs> &obs)
   {
     const double cosTheta = cos(p.theta);
     const double sinTheta = sin(p.theta);
@@ -37,14 +32,14 @@ namespace
     return out;
   }
 
-  std::vector<LandmarkObs> filter_landmarks(double sensor_range, const Particle &p,
-                                            const std::vector<Map::single_landmark_s> &landmarks)
+  std::vector<LandmarkObs> filterLandmarks(double sensorRange, const Particle &p,
+                                           const std::vector<Map::single_landmark_s> &landmarks)
   {
     std::vector<LandmarkObs> out;
     out.reserve(landmarks.size());
     for (auto const &l : landmarks)
     {
-      if (std::islessequal(dist(p.x, p.y, l.x_f, l.y_f), sensor_range))
+      if (std::islessequal(dist(p.x, p.y, l.x_f, l.y_f), sensorRange))
       {
         out.push_back({
             .id = l.id_i,
@@ -67,16 +62,16 @@ void ParticleFilter::init(double x, double y, double theta, double sigma[])
 
   // Use Gaussian distribution
   std::default_random_engine gen;
-  std::normal_distribution<double> dist_x(x, sigma[0]);
-  std::normal_distribution<double> dist_y(y, sigma[1]);
-  std::normal_distribution<double> dist_theta(theta, sigma[2]);
+  std::normal_distribution<double> distX(x, sigma[0]);
+  std::normal_distribution<double> distY(y, sigma[1]);
+  std::normal_distribution<double> distTheta(theta, sigma[2]);
 
   for (size_t i = 0; i < particles.size(); i++)
   {
     auto &p = particles[i];
-    p.x = dist_x(gen);
-    p.y = dist_y(gen);
-    p.theta = dist_theta(gen);
+    p.x = distX(gen);
+    p.y = distY(gen);
+    p.theta = distTheta(gen);
     p.weight = weights[i];
     p.id = i;
   }
@@ -84,17 +79,17 @@ void ParticleFilter::init(double x, double y, double theta, double sigma[])
   is_initialized = true;
 }
 
-void ParticleFilter::prediction(double delta_t, double std_pos[],
-                                double velocity, double yaw_rate)
+void ParticleFilter::prediction(double dT, double stdev[],
+                                double velocity, double yawRate)
 {
   // Use Gaussian distribution
   std::default_random_engine gen;
-  std::normal_distribution<double> noise_x(0.0, std_pos[0]);
-  std::normal_distribution<double> noise_y(0.0, std_pos[1]);
-  std::normal_distribution<double> noise_theta(0.0, std_pos[2]);
+  std::normal_distribution<double> noiseX(0.0, stdev[0]);
+  std::normal_distribution<double> noiseY(0.0, stdev[1]);
+  std::normal_distribution<double> noiseTheta(0.0, stdev[2]);
 
-  const auto yawRateIsSmall = (fabs(yaw_rate) < 1e-06);
-  const auto dV = velocity * delta_t;
+  const auto yawRateIsSmall = (fabs(yawRate) < 1e-06);
+  const auto dV = velocity * dT;
 
   for (auto &p : particles)
   {
@@ -108,68 +103,68 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
     }
     else
     {
-      const auto dTheta = yaw_rate * delta_t;
-      const double vPerTheta = velocity / yaw_rate;
+      const auto dTheta = yawRate * dT;
+      const double vPerTheta = velocity / yawRate;
 
       p.x += vPerTheta * (sin(p.theta + dTheta) - sinP);
       p.y += vPerTheta * (cosP - cos(p.theta + dTheta));
       p.theta += dTheta;
     }
 
-    p.x += noise_x(gen);
-    p.y += noise_y(gen);
-    p.theta += noise_theta(gen);
+    p.x += noiseX(gen);
+    p.y += noiseY(gen);
+    p.theta += noiseTheta(gen);
   }
 }
 
 void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted,
                                      std::vector<LandmarkObs> &observations)
 {
-  const auto not_found = -1;
+  const auto notFound = -1;
   for (auto &o : observations)
   {
-    auto min_dist = std::numeric_limits<double>::max();
-    o.id = not_found;
+    auto minDist = std::numeric_limits<double>::max();
+    o.id = notFound;
     for (const auto &p : predicted)
     {
       const auto d = dist(p.x, p.y, o.x, o.y);
-      if (std::islessequal(d, min_dist))
+      if (std::islessequal(d, minDist))
       {
-        min_dist = d;
+        minDist = d;
         o.id = p.id;
       }
     }
 
-    if (o.id == not_found)
+    if (o.id == notFound)
     {
       throw std::logic_error("Landmark not found");
     }
   }
 }
 
-void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
+void ParticleFilter::updateWeights(double sensorRange, double stdev[],
                                    const std::vector<LandmarkObs> &observations,
-                                   const Map &map_landmarks)
+                                   const Map &mapLandmarks)
 {
   for (size_t pId = 0; pId < particles.size(); pId++)
   {
     auto &p = particles[pId];
-    auto transformedObservations = observations_for_particle(p, observations);
-    const auto &mapLandmarks = map_landmarks.landmark_list;
-    const auto landmarks = filter_landmarks(sensor_range, p, mapLandmarks);
+    auto transformedObservations = observationsForParticle(p, observations);
+    const auto &marksList = mapLandmarks.landmark_list;
+    const auto landmarks = filterLandmarks(sensorRange, p, marksList);
 
     dataAssociation(landmarks, transformedObservations);
 
     p.weight = 1.0;
     for (const auto &tobs : transformedObservations)
     {
-      const double x = static_cast<double>(mapLandmarks[tobs.id - 1].x_f);
-      const double y = static_cast<double>(mapLandmarks[tobs.id - 1].y_f);
+      const double x = static_cast<double>(marksList[tobs.id - 1].x_f);
+      const double y = static_cast<double>(marksList[tobs.id - 1].y_f);
       const double xDiff = pow(tobs.x - x, 2.0);
       const double yDiff = pow(tobs.y - y, 2.0);
-      const double xStd = pow(std_landmark[0], 2.0);
-      const double yStd = pow(std_landmark[1], 2.0);
-      const double prob = (1 / (2 * M_PI * std_landmark[0] * std_landmark[1])) * exp(-(xDiff / (2 * xStd) + yDiff / (2 * yStd)));
+      const double xStd = pow(stdev[0], 2.0);
+      const double yStd = pow(stdev[1], 2.0);
+      const double prob = (1 / (2 * M_PI * stdev[0] * stdev[1])) * exp(-(xDiff / (2 * xStd) + yDiff / (2 * yStd)));
       p.weight *= prob;
     }
 
