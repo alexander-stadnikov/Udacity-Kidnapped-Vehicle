@@ -1,8 +1,5 @@
 /**
  * particle_filter.cpp
- *
- * Created on: Dec 12, 2016
- * Author: Tiffany Huang
  */
 
 #include "particle_filter.h"
@@ -171,13 +168,15 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
   }
 }
 
-void ParticleFilter::resample() {
-  /**
-   * TODO: Resample particles with replacement with probability proportional 
-   *   to their weight. 
-   * NOTE: You may find std::discrete_distribution helpful here.
-   *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
-   */
+void ParticleFilter::resample()
+{
+  std::default_random_engine gen;
+  std::discrete_distribution<size_t> d(weights.begin(), weights.end());
+  std::vector<Particle> resampled(particles.size());
+  for (auto& p : resampled) {
+    p = particles[d(gen)];
+  }
+  particles = resampled;
 }
 
 void ParticleFilter::SetAssociations(Particle& particle, 
