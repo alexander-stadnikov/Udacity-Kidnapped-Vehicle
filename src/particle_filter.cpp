@@ -21,10 +21,49 @@
 #include "helper_functions.h"
 
 namespace {
+
 bool is_zero(double val)
 {
   return std::isless(val, 1.0e-06);
 }
+
+std::vector<LandmarkObs> observations_for_particle(const Particle& p,
+                                                   const std::vector<LandmarkObs>& obs)
+{
+  const double cosTheta = cos(p.theta);
+  const double sinTheta = sin(p.theta);
+
+  std::vector<LandmarkObs> out;
+  out.reserve(obs.size());
+  for (const auto& o : obs) {
+    out.push_back({
+      .id = -1,
+      .x = p.x + cosTheta * o.x - sinTheta * o.y,
+      .y = p.y + sinTheta * o.x + cosTheta * o.y
+    });
+  }
+
+  return out;
+}
+
+std::vector<LandmarkObs> filter_landmarks(double sensor_range, const Particle& p,
+                                          const std::vector<Map::single_landmark_s>& landmarks)
+{
+  std::vector<LandmarkObs> out;
+  out.reserve(landmarks.size());
+  for (auto const &l : landmarks) {
+    if (std::islessequal(dist(p.x, p.y, l.x_f, l.y_f), sensor_range)) {
+      out.push_back({
+          .id = l.id_i,
+          .x = static_cast<double>(l.x_f),
+          .y = static_cast<double>(l.y_f),
+      });
+    }
+  }
+
+  return out;
+}
+
 }
 
 void ParticleFilter::init(double x, double y, double theta, double sigma[])
@@ -106,21 +145,30 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted,
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[], 
                                    const std::vector<LandmarkObs> &observations, 
-                                   const Map &map_landmarks) {
-  /**
-   * TODO: Update the weights of each particle using a mult-variate Gaussian 
-   *   distribution. You can read more about this distribution here: 
-   *   https://en.wikipedia.org/wiki/Multivariate_normal_distribution
-   * NOTE: The observations are given in the VEHICLE'S coordinate system. 
-   *   Your particles are located according to the MAP'S coordinate system. 
-   *   You will need to transform between the two systems. Keep in mind that
-   *   this transformation requires both rotation AND translation (but no scaling).
-   *   The following is a good resource for the theory:
-   *   https://www.willamette.edu/~gorr/classes/GeneralGraphics/Transforms/transforms2d.htm
-   *   and the following is a good resource for the actual equation to implement
-   *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
-   */
+                                   const Map &map_landmarks)
+{
+  for (auto& p : particles) {
+    auto transformedObservations = observations_for_particle(p, observations);
+    const auto& mapLandmarks = map_landmarks.landmark_list;
+    const auto landmarks = filter_landmarks(sensor_range, p, mapLandmarks);
 
+    dataAssociation(landmarks, transformedObservations);
+
+    p.weight = 1.0;
+    for (const auto& tobs : transformedObservations) {
+      const double x = static_cast<double>(mapLandmarks[tobs.id - 1].x_f);
+      const double y = static_cast<double>(mapLandmarks[tobs.id - 1].y_f);
+      const double xDiff = pow(tobs.x - x, 2.0);
+      const double yDiff = pow(tobs.y - y, 2.0);
+      const double xStd = pow(std_landmark[0], 2.0);
+      const double yStd = pow(std_landmark[1], 2.0);
+      const double prob = (1 / (2 * M_PI * std_landmark[0] * std_landmark[1]))
+                          * exp(-(xDiff / (2 * xStd) + yDiff / (2 * yStd)));
+      p.weight *= prob;
+    }
+
+    weights[p.id] = p.weight;
+  }
 }
 
 void ParticleFilter::resample() {
@@ -130,7 +178,6 @@ void ParticleFilter::resample() {
    * NOTE: You may find std::discrete_distribution helpful here.
    *   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
    */
-
 }
 
 void ParticleFilter::SetAssociations(Particle& particle, 
