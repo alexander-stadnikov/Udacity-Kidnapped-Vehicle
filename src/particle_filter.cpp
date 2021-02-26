@@ -19,12 +19,6 @@
 
 namespace
 {
-
-  bool is_zero(double val)
-  {
-    return std::isless(val, 1.0e-06);
-  }
-
   std::vector<LandmarkObs> observations_for_particle(const Particle &p,
                                                      const std::vector<LandmarkObs> &obs)
   {
@@ -67,7 +61,7 @@ namespace
 
 void ParticleFilter::init(double x, double y, double theta, double sigma[])
 {
-  num_particles = 1000;
+  num_particles = 500;
   particles.resize(num_particles);
   weights.resize(num_particles, 1.0);
 
@@ -99,24 +93,26 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
   std::normal_distribution<double> noise_y(0.0, std_pos[1]);
   std::normal_distribution<double> noise_theta(0.0, std_pos[2]);
 
-  const auto dTheta = yaw_rate * delta_t;
-  const double vPerTheta = is_zero(yaw_rate) ? 0.0 : velocity / yaw_rate;
+  const auto yawRateIsSmall = (fabs(yaw_rate) < 1e-06);
   const auto dV = velocity * delta_t;
 
   for (auto &p : particles)
   {
     const auto cosP = cos(p.theta);
     const auto sinP = sin(p.theta);
-    if (is_zero(yaw_rate))
+
+    if (yawRateIsSmall)
     {
       p.x += dV * cosP;
       p.y += dV * sinP;
     }
     else
     {
-      const auto theta_2 = p.theta + dTheta;
-      p.x += vPerTheta * (sin(theta_2) - sinP);
-      p.y += vPerTheta * (cosP - cos(theta_2));
+      const auto dTheta = yaw_rate * delta_t;
+      const double vPerTheta = velocity / yaw_rate;
+
+      p.x += vPerTheta * (sin(p.theta + dTheta) - sinP);
+      p.y += vPerTheta * (cosP - cos(p.theta + dTheta));
       p.theta += dTheta;
     }
 
@@ -155,8 +151,9 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
                                    const std::vector<LandmarkObs> &observations,
                                    const Map &map_landmarks)
 {
-  for (auto &p : particles)
+  for (size_t pId = 0; pId < particles.size(); pId++)
   {
+    auto &p = particles[pId];
     auto transformedObservations = observations_for_particle(p, observations);
     const auto &mapLandmarks = map_landmarks.landmark_list;
     const auto landmarks = filter_landmarks(sensor_range, p, mapLandmarks);
@@ -176,7 +173,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       p.weight *= prob;
     }
 
-    weights[p.id] = p.weight;
+    weights[pId] = p.weight;
   }
 }
 
