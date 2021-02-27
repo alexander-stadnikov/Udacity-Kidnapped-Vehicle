@@ -29,14 +29,14 @@ The [Particle Filter](https://en.wikipedia.org/wiki/Particle_filter) algorithm m
 The Particle Filter program can be built and run by doing the following from the project top directory.
 
 ```bash
-$> ./build.sh
+$ ./build.sh
 ```
 
 ## Run
 Run from the project top directory.
 
 ```bash
-$> ./run.sh
+$ ./run.sh
 ```
 
 ## Result
